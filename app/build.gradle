@@ -44,6 +44,7 @@ dependencies {
     def mockito_inline_version = "2.27.0"
     def arch_testing_version = "1.1.1"
     def mockk_version = "1.9"
+    def easy_permissions = "3.0.0"
 
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
@@ -88,6 +89,9 @@ dependencies {
 
     // Gson
     implementation "com.google.code.gson:gson:$gson_version"
+
+    // Easy Permissions
+    implementation "pub.devrel:easypermissions:$easy_permissions"
 
     // Koin
     implementation "org.koin:koin-android-viewmodel:$koin_version"
