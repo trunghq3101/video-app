@@ -1,6 +1,6 @@
 package com.example.videoapp.ui.screen.camera
 
-import androidx.lifecycle.ViewModel
+import com.example.videoapp.ui.base.BaseViewModel
 
-class CameraViewModel : ViewModel() {
+class CameraViewModel : BaseViewModel() {
 }

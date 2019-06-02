@@ -3,8 +3,10 @@ package com.example.videoapp.ui.screen.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
+import android.media.ImageReader
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -12,13 +14,13 @@ import android.util.Size
 import android.view.*
 import androidx.fragment.app.Fragment
 import com.example.videoapp.R
+import com.example.videoapp.R.string
 import com.example.videoapp.data.constants.Constants.FRAGMENT_DIALOG
 import com.example.videoapp.data.constants.Constants.REQUEST_CAMERA_PERMISSION
 import com.example.videoapp.ui.dialog.ErrorDialog
 import kotlinx.android.synthetic.main.camera_fragment.*
 import org.koin.android.viewmodel.ext.android.viewModel
 import pub.devrel.easypermissions.EasyPermissions
-import java.util.*
 import java.util.concurrent.Semaphore
 
 class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
@@ -70,7 +72,75 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
             onDisconnected(cameraDevice)
             activity?.finish()
         }
-
+    }
+    private var imageReader: ImageReader? = null
+    private val imageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
+            val image = reader?.acquireNextImage()
+            image?.let {
+                val planes = it.planes
+                val w = it.width
+                val h = it.height
+                var dstIndex = 0
+                val yBytes = ByteArray(w * h)
+                val uBytes = ByteArray(w * h / 4)
+                val vBytes = ByteArray(w * h /4)
+                var uIndex = 0
+                var vIndex = 0
+                var pixelsStride = 0
+                var rowStride = 0
+                for (i in 0 until planes.size) {
+                    pixelsStride = planes[i].pixelStride
+                    rowStride = planes[i].rowStride
+                    val buffer = planes[i].buffer
+                    val bytes = ByteArray(buffer.capacity())
+                    buffer.get(bytes)
+                    var srcIndex = 0
+                    when (i) {
+                        0 -> {
+                            for (j in 0 until h) {
+                                System.arraycopy(bytes, srcIndex, yBytes, dstIndex, w)
+                                srcIndex += rowStride
+                                dstIndex += w
+                            }
+                        }
+                        1 -> {
+                            for (j in 0 until h / 2) {
+                                for (k in 0 until w / 2) {
+                                    uBytes[uIndex++] = bytes[srcIndex]
+                                    srcIndex += pixelsStride
+                                }
+                                if (pixelsStride == 2) {
+                                    srcIndex += rowStride - w
+                                } else if (pixelsStride == 1) {
+                                    srcIndex += rowStride - w / 2
+                                }
+                            }
+                        }
+                        2 -> {
+                            for (j in 0 until h / 2) {
+                                for (k in 0 until w / 2) {
+                                    vBytes[vIndex++] = bytes[srcIndex]
+                                    srcIndex += pixelsStride
+                                }
+                                if (pixelsStride == 2) {
+                                    srcIndex += rowStride - w
+                                } else if (pixelsStride == 1) {
+                                    srcIndex += rowStride - w / 2
+                                }
+                            }
+                        }
+                    }
+                }
+                it.close()
+            }
+        }
+    private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(
+            session: CameraCaptureSession,
+            request: CaptureRequest,
+            result: TotalCaptureResult
+        ) {
+        }
     }
 
     override fun onCreateView(
@@ -78,6 +148,9 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         savedInstanceState: Bundle?
     ): View? {
         return inflater.inflate(R.layout.camera_fragment, container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
     }
 
     override fun onRequestPermissionsResult(
@@ -102,6 +175,8 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     override fun onStop() {
         super.onStop()
         closeCamera()
+        imageReader?.close()
+        imageReader = null
         closeBackgroundThread()
     }
 
@@ -110,7 +185,7 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         if (!EasyPermissions.hasPermissions(requireContext(), Manifest.permission.CAMERA)) {
             EasyPermissions.requestPermissions(
                 this,
-                getString(R.string.camera_permission),
+                getString(string.camera_permission),
                 REQUEST_CAMERA_PERMISSION,
                 Manifest.permission.CAMERA
             )
@@ -140,6 +215,8 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                 ) ?: continue
                 this.previewSize = map.getOutputSizes(SurfaceTexture::class.java)[0]
                 this.cameraId = cameraId
+                imageReader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 1)
+                imageReader?.setOnImageAvailableListener(imageAvailableListener, backgroundHandler)
                 return
             }
         } catch (e: CameraAccessException) {
@@ -147,7 +224,7 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         } catch (e: NullPointerException) {
             // Currently an NPE is thrown when the Camera2API is used but not supported on the
             // device this code runs.
-            ErrorDialog.newInstance(getString(R.string.camera_error))
+            ErrorDialog.newInstance(getString(com.example.videoapp.R.string.camera_error))
                 .show(childFragmentManager, FRAGMENT_DIALOG)
         }
 
@@ -165,11 +242,13 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                 surfaceTexture.setDefaultBufferSize(it.width, it.height)
             }
             val previewSurface = Surface(surfaceTexture)
+            val imageSurface = imageReader?.surface
             captureRequestBuilder =
                 cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             captureRequestBuilder?.addTarget(previewSurface)
+            captureRequestBuilder?.addTarget(imageSurface)
             cameraDevice?.createCaptureSession(
-                Collections.singletonList(previewSurface),
+                arrayListOf(previewSurface, imageSurface),
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigureFailed(session: CameraCaptureSession) {
                     }
@@ -180,7 +259,7 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                             cameraCaptureSession = session.apply {
                                 setRepeatingRequest(
                                     captureRequest,
-                                    null,
+                                    captureCallback,
                                     backgroundHandler
                                 )
                             }

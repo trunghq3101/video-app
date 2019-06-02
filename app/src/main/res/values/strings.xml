@@ -5,4 +5,5 @@
     <string name="hello_blank_fragment">Hello blank fragment</string>
     <string name="camera_permission">This feature needs to access your camera</string>
     <string name="camera_error">This device doesn\\\'t support Camera2 API.</string>
+    <string name="ok">Ok</string>
 </resources>
