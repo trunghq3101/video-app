@@ -1,0 +1,14 @@
+prefix=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86_64/ffmpeg
+exec_prefix=${prefix}
+libdir=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86_64/ffmpeg/lib
+includedir=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86_64/ffmpeg/include
+
+Name: libavformat
+Description: FFmpeg container format library
+Version: 58.26.101
+Requires: 
+Requires.private: libavcodec >= 58.47.106, libswresample >= 3.4.100, libavutil >= 56.26.100
+Conflicts:
+Libs: -L${libdir}  -lavformat 
+Libs.private: -lm
+Cflags: -I${includedir}

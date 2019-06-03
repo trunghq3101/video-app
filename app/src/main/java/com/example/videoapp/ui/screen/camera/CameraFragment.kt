@@ -241,6 +241,9 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
             previewSize?.let {
                 surfaceTexture.setDefaultBufferSize(it.width, it.height)
             }
+            surfaceTexture.setOnFrameAvailableListener {
+
+            }
             val previewSurface = Surface(surfaceTexture)
             val imageSurface = imageReader?.surface
             captureRequestBuilder =

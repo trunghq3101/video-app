@@ -1,0 +1,14 @@
+prefix=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-arm/ffmpeg
+exec_prefix=${prefix}
+libdir=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-arm/ffmpeg/lib
+includedir=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-arm/ffmpeg/include
+
+Name: libswscale
+Description: FFmpeg image rescaling library
+Version: 5.4.100
+Requires: 
+Requires.private: libavutil >= 56.26.100
+Conflicts:
+Libs: -L${libdir}  -lswscale 
+Libs.private: -lm
+Cflags: -I${includedir}

@@ -1,0 +1,14 @@
+prefix=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-arm64/ffmpeg
+exec_prefix=${prefix}
+libdir=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-arm64/ffmpeg/lib
+includedir=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-arm64/ffmpeg/include
+
+Name: libavutil
+Description: FFmpeg utility library
+Version: 56.26.100
+Requires: 
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavutil 
+Libs.private: -pthread -lm
+Cflags: -I${includedir}

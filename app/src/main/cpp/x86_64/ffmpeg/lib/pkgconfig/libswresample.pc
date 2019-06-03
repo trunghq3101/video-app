@@ -1,0 +1,14 @@
+prefix=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86_64/ffmpeg
+exec_prefix=${prefix}
+libdir=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86_64/ffmpeg/lib
+includedir=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86_64/ffmpeg/include
+
+Name: libswresample
+Description: FFmpeg audio resampling library
+Version: 3.4.100
+Requires: 
+Requires.private: libavutil >= 56.26.100
+Conflicts:
+Libs: -L${libdir}  -lswresample 
+Libs.private: -lm
+Cflags: -I${includedir}
