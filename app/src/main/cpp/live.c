@@ -59,7 +59,7 @@ int fps = 15;
  * Method:    init  初始化ffmpeg相关,准备推送
  * Signature: (Ljava/lang/String;)I rmtp服务地址
  */
-JNIEXPORT jint JNICALL Java_com_david_camerapush_ffmpeg_FFmpegHandler_changeFilter(
+JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_changeFilter(
         JNIEnv *jniEnv, jobject instance, jint curFilter) {
     switch (48 + curFilter % 6) {
         case FILTER_NULL:
@@ -212,7 +212,7 @@ static int apply_filters(/*AVFormatContext *ifmt_ctx*/)
     return 0;
 }
 
-JNIEXPORT jint JNICALL Java_com_david_camerapush_ffmpeg_FFmpegHandler_init
+JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
         (JNIEnv *jniEnv, jobject instance, jstring url) {
 
     buffersrc = (AVFilter *) avfilter_get_by_name("buffer");
@@ -309,7 +309,7 @@ JNIEXPORT jint JNICALL Java_com_david_camerapush_ffmpeg_FFmpegHandler_init
 }
 
 
-JNIEXPORT jint JNICALL Java_com_david_camerapush_ffmpeg_FFmpegHandler_pushCameraData
+JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraData
         (JNIEnv *jniEnv, jobject instance, jint n, jbyteArray yArray, jint yLen, jbyteArray uArray, jint uLen,
          jbyteArray vArray, jint vLen) {
     jbyte *yin = (*jniEnv)->GetByteArrayElements(jniEnv, yArray, NULL);
@@ -411,7 +411,7 @@ JNIEXPORT jint JNICALL Java_com_david_camerapush_ffmpeg_FFmpegHandler_pushCamera
 /**
  * 释放资源
  */
-JNIEXPORT jint JNICALL Java_com_david_camerapush_ffmpeg_FFmpegHandler_close
+JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_close
         (JNIEnv *jniEnv, jobject instance) {
     if (video_st)
         avcodec_close(pCodecCtx);

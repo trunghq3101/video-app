@@ -18,6 +18,7 @@ import com.example.videoapp.R.string
 import com.example.videoapp.data.constants.Constants.FRAGMENT_DIALOG
 import com.example.videoapp.data.constants.Constants.REQUEST_CAMERA_PERMISSION
 import com.example.videoapp.ui.dialog.ErrorDialog
+import com.example.videoapp.utils.FFmpegHandler
 import kotlinx.android.synthetic.main.camera_fragment.*
 import org.koin.android.viewmodel.ext.android.viewModel
 import pub.devrel.easypermissions.EasyPermissions
@@ -131,6 +132,10 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                         }
                     }
                 }
+                FFmpegHandler.instance
+                    .pushCameraData(0, yBytes, yBytes.size, uBytes, uBytes.size, vBytes, vBytes.size)
+                FFmpegHandler.instance
+                    .pushCameraData(1, yBytes, yBytes.size, uBytes, uBytes.size, vBytes, vBytes.size)
                 it.close()
             }
         }
@@ -164,6 +169,13 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
 
     override fun onResume() {
         super.onResume()
+
+        // For real debug device
+        //FFmpegHandler.instance.init("rtmp://192.168.1.241/live")
+
+        // For emulator
+        FFmpegHandler.instance.init("rtmp://127.0.0.1/live")
+
         startBackgroundThread()
         if (textureCamera.isAvailable) {
             openCamera()
@@ -172,12 +184,19 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         }
     }
 
-    override fun onStop() {
-        super.onStop()
+    override fun onPause() {
         closeCamera()
-        imageReader?.close()
-        imageReader = null
         closeBackgroundThread()
+        FFmpegHandler.instance.close()
+        super.onPause()
+    }
+
+    override fun onPermissionsDenied(requestCode: Int, perms: List<String>) {
+        activity?.onBackPressed()
+    }
+
+    override fun onPermissionsGranted(requestCode: Int, perms: MutableList<String>) {
+        openCamera()
     }
 
     @SuppressLint("MissingPermission")
@@ -241,9 +260,6 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
             previewSize?.let {
                 surfaceTexture.setDefaultBufferSize(it.width, it.height)
             }
-            surfaceTexture.setOnFrameAvailableListener {
-
-            }
             val previewSurface = Surface(surfaceTexture)
             val imageSurface = imageReader?.surface
             captureRequestBuilder =
@@ -280,10 +296,14 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     }
 
     private fun closeCamera() {
+        cameraOpenCloseLock.acquire()
         cameraCaptureSession?.close()
         cameraCaptureSession = null
         cameraDevice?.close()
         cameraDevice = null
+        imageReader?.close()
+        imageReader = null
+        cameraOpenCloseLock.release()
     }
 
     private fun closeBackgroundThread() {
@@ -292,13 +312,5 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
             backgroundThread = null
             backgroundHandler = null
         }
-    }
-
-    override fun onPermissionsDenied(requestCode: Int, perms: List<String>) {
-        activity?.onBackPressed()
-    }
-
-    override fun onPermissionsGranted(requestCode: Int, perms: MutableList<String>) {
-        openCamera()
     }
 }
