@@ -2,8 +2,10 @@ package com.example.videoapp.utils
 
 class FFmpegHandler private constructor() {
 
-    private object SingletonInstance {
-        val INSTANCE = FFmpegHandler()
+    private class SingletonInstance {
+        companion object {
+            val INSTANCE = FFmpegHandler()
+        }
     }
 
     external fun init(outUrl: String): Int
@@ -28,16 +30,12 @@ class FFmpegHandler private constructor() {
             get() = SingletonInstance.INSTANCE
 
         init {
+//            System.loadLibrary("avcodec")
+//            System.loadLibrary("avfilter")
+//            System.loadLibrary("avformat")
+//            System.loadLibrary("avutil")
+//            System.loadLibrary("swscale")
             System.loadLibrary("live")
-            //        System.loadLibrary("avcodec-58");
-            //        System.loadLibrary("avdevice-58");
-            //        System.loadLibrary("avfilter-7");
-            //        System.loadLibrary("avformat-58");
-            //        System.loadLibrary("avutil-56");
-            //        System.loadLibrary("postproc-55");
-            //        System.loadLibrary("swresample-3");
-            //        System.loadLibrary("swscale-5");
-
         }
     }
 }

@@ -1,0 +1,11 @@
+prefix=/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86_64/x265
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: x265
+Description: H.265/HEVC video encoder
+Version: 3.0
+Libs: -L${libdir} -lx265
+Libs.private: -lm -ldl -llog -lc++_shared -lc++ -lm -ldl -ldl
+Cflags: -I${includedir}

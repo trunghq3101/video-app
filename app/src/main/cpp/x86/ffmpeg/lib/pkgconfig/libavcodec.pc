@@ -10,5 +10,5 @@ Requires:
 Requires.private: libswresample >= 3.4.100, libavutil >= 56.26.100
 Conflicts:
 Libs: -L${libdir}  -lavcodec 
-Libs.private: -pthread -lm
+Libs.private: -pthread -lm -L/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86/x264/lib -lx264 -lm -ldl -L/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86/x265/lib -lx265 -lxvidcore
 Cflags: -I${includedir}

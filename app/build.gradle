@@ -119,7 +119,7 @@ dependencies {
     implementation "com.wonderkiln:camerakit:$camera_kit_version"
 
     // FFmpeg
-    implementation "com.arthenica:mobile-ffmpeg-min:$ffmpeg_mobile_version"
+    implementation "com.arthenica:mobile-ffmpeg-min-gpl:$ffmpeg_mobile_version"
 
     // Koin
     implementation "org.koin:koin-android-viewmodel:$koin_version"

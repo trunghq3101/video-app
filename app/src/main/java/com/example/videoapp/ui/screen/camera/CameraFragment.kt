@@ -174,7 +174,7 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         //FFmpegHandler.instance.init("rtmp://192.168.1.241/live")
 
         // For emulator
-        FFmpegHandler.instance.init("rtmp://127.0.0.1/live")
+        FFmpegHandler.instance.init("rtmp://10.0.2.2/live")
 
         startBackgroundThread()
         if (textureCamera.isAvailable) {
@@ -196,17 +196,19 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     }
 
     override fun onPermissionsGranted(requestCode: Int, perms: MutableList<String>) {
-        openCamera()
+        //openCamera()
     }
 
     @SuppressLint("MissingPermission")
     private fun openCamera() {
-        if (!EasyPermissions.hasPermissions(requireContext(), Manifest.permission.CAMERA)) {
+        if (!EasyPermissions.hasPermissions(requireContext(), Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE)) {
             EasyPermissions.requestPermissions(
                 this,
                 getString(string.camera_permission),
                 REQUEST_CAMERA_PERMISSION,
-                Manifest.permission.CAMERA
+                Manifest.permission.CAMERA,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                Manifest.permission.READ_EXTERNAL_STORAGE
             )
             return
         }
@@ -226,7 +228,7 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                 val characteristics = manager.getCameraCharacteristics(cameraId)
                 // We don't use a front facing camera in this sample.
                 val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
-                if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                if (facing != null && facing != CameraCharacteristics.LENS_FACING_BACK) {
                     continue
                 }
                 val map = characteristics.get(

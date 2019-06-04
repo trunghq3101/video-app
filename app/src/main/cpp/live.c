@@ -281,8 +281,9 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
         av_dict_set(&param, "tune", "zerolatency", 0);
     }
 
-    if (avcodec_open2(pCodecCtx, pCodec, &param) < 0) {
-        LOGE("Failed to open encoder!\n");
+    ret = avcodec_open2(pCodecCtx, pCodec, &param);
+    if (ret < 0) {
+        LOGE("Failed to open encoder! %s\n", av_err2str(ret));
         return -1;
     }
 
@@ -414,7 +415,7 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraD
 JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_close
         (JNIEnv *jniEnv, jobject instance) {
     if (video_st)
-        avcodec_close(pCodecCtx);
+        avcodec_free_context(pCodecCtx);
     if (ofmt_ctx) {
         avio_close(ofmt_ctx->pb);
         avformat_free_context(ofmt_ctx);

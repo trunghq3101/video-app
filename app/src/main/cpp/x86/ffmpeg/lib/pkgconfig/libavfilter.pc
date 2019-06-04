@@ -10,5 +10,5 @@ Requires:
 Requires.private: libswscale >= 5.4.100, libavformat >= 58.26.101, libavcodec >= 58.47.106, libswresample >= 3.4.100, libavutil >= 56.26.100
 Conflicts:
 Libs: -L${libdir}  -lavfilter 
-Libs.private: -pthread -lm
+Libs.private: -pthread -lm -L/home/hoang.quoc.trung/DEV/mobile-ffmpeg/prebuilt/android-x86/libvidstab/lib -lvidstab -lm
 Cflags: -I${includedir}
