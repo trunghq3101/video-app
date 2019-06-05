@@ -221,7 +221,6 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
 
     const char *out_url = (*jniEnv)->GetStringUTFChars(jniEnv, url, 0);
 
-    //计算yuv数据的长度
     yuv_width = width;
     yuv_height = height;
     y_length = width * height;
@@ -242,21 +241,13 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
     }
 
     pCodecCtx = avcodec_alloc_context3(pCodec);
-    //编码器的ID号，这里为264编码器，可以根据video_st里的codecID 参数赋值
     pCodecCtx->codec_id = pCodec->id;
-
-    //像素的格式，也就是说采用什么样的色彩空间来表明一个像素点
     pCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
-    //编码器编码的数据类型
     pCodecCtx->codec_type = AVMEDIA_TYPE_VIDEO;
-    //编码目标的视频帧大小，以像素为单位
     pCodecCtx->width = width;
     pCodecCtx->height = height;
     pCodecCtx->framerate = (AVRational) {15, 1};
-
-    //帧率的基本单位，我们用分数来表示，
     pCodecCtx->time_base = (AVRational) {1, 15};
-    //目标的码率，即采样的码率；显然，采样码率越大，视频大小越大
     pCodecCtx->bit_rate = 400000;
     pCodecCtx->gop_size = 50;
     /* Some formats want stream headers to be separate. */
@@ -264,20 +255,14 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
         pCodecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
     //H264 codec param
-//    pCodecCtx->me_range = 16;
-    //pCodecCtx->max_qdiff = 4;
     pCodecCtx->qcompress = 0.6;
-    //最大和最小量化系数
     pCodecCtx->qmin = 10;
     pCodecCtx->qmax = 51;
-    //Optional Param
-    //两个非B帧之间允许出现多少个B帧数
-    //设置0表示不使用B帧，b 帧越多，图片越小
     pCodecCtx->max_b_frames = 0;
     AVDictionary *param = 0;
     //H.264
     if (pCodecCtx->codec_id == AV_CODEC_ID_H264) {
-        av_dict_set(&param, "preset", "superfast", 0); //x264编码速度的选项
+        av_dict_set(&param, "preset", "superfast", 0);
         av_dict_set(&param, "tune", "zerolatency", 0);
     }
 
@@ -313,6 +298,9 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
 JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraData
         (JNIEnv *jniEnv, jobject instance, jint n, jbyteArray yArray, jint yLen, jbyteArray uArray, jint uLen,
          jbyteArray vArray, jint vLen) {
+
+    if (ofmt_ctx->pb == NULL) return -1;
+
     jbyte *yin = (*jniEnv)->GetByteArrayElements(jniEnv, yArray, NULL);
     jbyte *uin = (*jniEnv)->GetByteArrayElements(jniEnv, uArray, NULL);
     jbyte *vin = (*jniEnv)->GetByteArrayElements(jniEnv, vArray, NULL);
@@ -325,7 +313,6 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraD
     uint8_t *buffers = (uint8_t *) av_malloc(picture_size);
 
 
-    //将buffers的地址赋给AVFrame中的图像数据，根据像素格式判断有几个数据指针
     av_image_fill_arrays(pFrameYUV->data, pFrameYUV->linesize, buffers, pCodecCtx->pix_fmt,
                          pCodecCtx->width, pCodecCtx->height, 1);
 
@@ -366,32 +353,27 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraD
     }
     av_frame_unref(picref);
 
-    //例如对于H.264来说。1个AVPacket的data通常对应一个NAL
-    //初始化AVPacket
     enc_pkt.data = NULL;
     enc_pkt.size = 0;
-//    __android_log_print(ANDROID_LOG_WARN, "eric", "编码前时间:%lld",
-//                        (long long) ((av_gettime() - startTime) / 1000));
-    //开始编码YUV数据
+
     ret = avcodec_send_frame(pCodecCtx, pFrameYUV);
     if (ret != 0) {
         LOGE("avcodec_send_frame error");
         return -1;
     }
-    //获取编码后的数据
-    ret = avcodec_receive_packet(pCodecCtx, &enc_pkt);
-
     av_frame_free(&pFrameYUV);
+
+    ret = avcodec_receive_packet(pCodecCtx, &enc_pkt);
     if (ret != 0 || enc_pkt.size <= 0) {
         LOGE("avcodec_receive_packet error %s", av_err2str(ret));
         return -2;
     }
+
     enc_pkt.stream_index = video_st->index;
     enc_pkt.pts = count * (video_st->time_base.den) / ((video_st->time_base.num) * fps);
     enc_pkt.dts = enc_pkt.pts;
     enc_pkt.duration = (video_st->time_base.den) / ((video_st->time_base.num) * fps);
     enc_pkt.pos = -1;
-
 
     ret = av_interleaved_write_frame(ofmt_ctx, &enc_pkt);
     if (ret != 0) {
@@ -414,10 +396,14 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraD
  */
 JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_close
         (JNIEnv *jniEnv, jobject instance) {
-    if (video_st)
-        avcodec_free_context(pCodecCtx);
+    if (pCodecCtx != NULL) {
+        avcodec_close(pCodecCtx);
+        pCodecCtx = NULL;
+    }
     if (ofmt_ctx) {
-        avio_close(ofmt_ctx->pb);
+        if (ofmt_ctx->pb != NULL) {
+            avio_close(ofmt_ctx->pb);
+        }
         avformat_free_context(ofmt_ctx);
         ofmt_ctx = NULL;
     }
