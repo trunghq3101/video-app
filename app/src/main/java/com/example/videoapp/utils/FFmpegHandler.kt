@@ -14,9 +14,17 @@ class FFmpegHandler private constructor() {
 
     external fun encodeFrame(
         n: Int,
+        w: Int,
+        h: Int,
         bufferY: ByteBuffer,
+        pixY: Int,
+        rowY: Int,
         bufferU: ByteBuffer,
-        bufferV: ByteBuffer
+        pixU: Int,
+        rowU: Int,
+        bufferV: ByteBuffer,
+        pixV: Int,
+        rowV: Int
     ): Int
 
     /*external fun pushCameraData(
