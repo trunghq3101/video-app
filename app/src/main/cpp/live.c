@@ -123,10 +123,6 @@ static int apply_filters(/*AVFormatContext *ifmt_ctx*/)
         printf("Cannot alloc int\n");
         return -1;
     }
-    /*if (!outputs) {
-        printf("Cannot alloc output\n");
-        return -1;
-    }*/
     AVFilterInOut *inputs = avfilter_inout_alloc();
     if (!inputs)
     {
@@ -294,11 +290,124 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
     return 0;
 }
 
+JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame(
+        JNIEnv  *jniEnv, jobject instance, jint n, jobject bufferY, jobject bufferU, jobject bufferV
+        ) {
+    if (ofmt_ctx->pb == NULL) goto END;
 
-JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraData
+    int ret = 0;
+    int picture_size = av_image_get_buffer_size(
+            pCodecCtx->pix_fmt,
+            pCodecCtx->width,
+            pCodecCtx->height,
+            1);
+    uint8_t *buffers = (uint8_t *) av_malloc(picture_size);
+    pFrameYUV = av_frame_alloc();
+    av_image_fill_arrays(
+            pFrameYUV->data,
+            pFrameYUV->linesize,
+            buffers,
+            pCodecCtx->pix_fmt,
+            pCodecCtx->width,
+            pCodecCtx->height,
+            1);
+
+    uint8_t *yin = (*jniEnv)->GetDirectBufferAddress(jniEnv, bufferY);
+    uint8_t *uin = (*jniEnv)->GetDirectBufferAddress(jniEnv, bufferU);
+    uint8_t *vin = (*jniEnv)->GetDirectBufferAddress(jniEnv, bufferV);
+
+    pFrameYUV->data[0] = yin;
+    pFrameYUV->data[1] = uin;
+    pFrameYUV->data[2] = vin;
+    pFrameYUV->pts = count;
+    pFrameYUV->format = AV_PIX_FMT_YUV420P;
+    pFrameYUV->width = yuv_width;
+    pFrameYUV->height = yuv_height;
+
+    // FILTER
+    struct SwsContext *img_convert_ctx;
+
+    if (filter_change) {
+        apply_filters();
+    }
+
+    filter_change = 0;
+
+    ret = av_buffersrc_add_frame(buffersrc_ctx[n], pFrameYUV);
+    if (ret < 0) {
+        printf("Error while feeding the filtergraph\n");
+        goto END;
+    }
+
+    picref = av_frame_alloc();
+
+    ret = av_buffersink_get_frame_flags(buffersink_ctx, picref, 0);
+    if (ret < 0) goto END;
+
+    if (picref) {
+        img_convert_ctx = sws_getContext(
+                picref->width,
+                picref->height,
+                (enum AVPixelFormat) picref->format,
+                        pCodecCtx->width,
+                        pCodecCtx->height,
+                        AV_PIX_FMT_YUV420P,
+                        SWS_BICUBIC, NULL, NULL, NULL);
+        sws_scale(
+                img_convert_ctx,
+                (const uint8_t *const *) picref->data,
+                picref->linesize,
+                0,
+                pCodecCtx->height,
+                pFrameYUV->data,
+                pFrameYUV->linesize);
+        sws_freeContext(img_convert_ctx);
+        pFrameYUV->width = picref->width;
+        pFrameYUV->height = picref->height;
+        pFrameYUV->format = AV_PIX_FMT_YUV420P;
+    }
+    av_frame_unref(picref);
+
+    enc_pkt.data = NULL;
+    enc_pkt.size = 0;
+
+    ret = avcodec_send_frame(pCodecCtx, pFrameYUV);
+    if (ret != 0) {
+        LOGE("avcodec_send_frame error");
+        goto END;
+    }
+    av_frame_free(&pFrameYUV);
+
+    ret = avcodec_receive_packet(pCodecCtx, &enc_pkt);
+    if (ret != 0 || enc_pkt.size <= 0) {
+        LOGE("avcodec_receive_packet error %s", av_err2str(ret));
+        goto END;
+    }
+
+    enc_pkt.stream_index = video_st->index;
+    enc_pkt.pts = count * (video_st->time_base.den) / ((video_st->time_base.num) * fps);
+    enc_pkt.dts = enc_pkt.pts;
+    enc_pkt.duration = (video_st->time_base.den) / ((video_st->time_base.num) * fps);
+    enc_pkt.pos = -1;
+
+    ret = av_interleaved_write_frame(ofmt_ctx, &enc_pkt);
+    if (ret != 0) {
+        LOGE("av_interleaved_write_frame failed");
+        goto END;
+    }
+    count++;
+
+    END:
+    av_packet_unref(&enc_pkt);
+    av_frame_free(&pFrameYUV);
+    av_free(buffers);
+
+    return ret;
+}
+
+/*JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraData
         (JNIEnv *jniEnv, jobject instance, jint n, jbyteArray yArray, jint yLen, jbyteArray uArray, jint uLen,
          jbyteArray vArray, jint vLen) {
-
     if (ofmt_ctx->pb == NULL) return -1;
 
     jbyte *yin = (*jniEnv)->GetByteArrayElements(jniEnv, yArray, NULL);
@@ -388,12 +497,8 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraD
     (*jniEnv)->ReleaseByteArrayElements(jniEnv, vArray, vin, 0);
 
     return 0;
-}
+}*/
 
-
-/**
- * 释放资源
- */
 JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_close
         (JNIEnv *jniEnv, jobject instance) {
     if (pCodecCtx != NULL) {

@@ -76,7 +76,26 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     }
     private var imageReader: ImageReader? = null
     private val imageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
-            val image = reader?.acquireNextImage()
+            handler?.post {
+                val image = reader?.acquireLatestImage()
+                image?.let {
+                    val planes = it.planes
+                    FFmpegHandler.instance.encodeFrame(
+                        0,
+                        planes[0].buffer,
+                        planes[1].buffer,
+                        planes[2].buffer
+                    )
+                    FFmpegHandler.instance.encodeFrame(
+                        1,
+                        planes[0].buffer,
+                        planes[1].buffer,
+                        planes[2].buffer
+                    )
+                    it.close()
+                }
+            }
+            /*val image = reader?.acquireLatestImage()
             image?.let {
                 val planes = it.planes
                 val w = it.width
@@ -132,13 +151,17 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                         }
                     }
                 }
-                FFmpegHandler.instance
-                    .pushCameraData(0, yBytes, yBytes.size, uBytes, uBytes.size, vBytes, vBytes.size)
-                FFmpegHandler.instance
-                    .pushCameraData(1, yBytes, yBytes.size, uBytes, uBytes.size, vBytes, vBytes.size)
+                handler?.post {
+                    FFmpegHandler.instance
+                        .pushCameraData(0, yBytes, yBytes.size, uBytes, uBytes.size, vBytes, vBytes.size)
+                    FFmpegHandler.instance
+                        .pushCameraData(1, yBytes, yBytes.size, uBytes, uBytes.size, vBytes, vBytes.size)
+                }
                 it.close()
-            }
+            }*/
         }
+    private var handlerThread: HandlerThread? = null
+    private var handler: Handler? = null
     private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(
             session: CameraCaptureSession,
@@ -236,8 +259,9 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                 ) ?: continue
                 this.previewSize = map.getOutputSizes(SurfaceTexture::class.java)[0]
                 this.cameraId = cameraId
-                imageReader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 1)
-                imageReader?.setOnImageAvailableListener(imageAvailableListener, backgroundHandler)
+                imageReader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 2).apply {
+                    setOnImageAvailableListener(imageAvailableListener, backgroundHandler)
+                }
                 return
             }
         } catch (e: CameraAccessException) {
@@ -254,6 +278,8 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     private fun startBackgroundThread() {
         backgroundThread = HandlerThread(BACKGROUND_THREAD).also { it.start() }
         backgroundHandler = Handler(backgroundThread?.looper)
+        handlerThread = HandlerThread("Push Frame").also { it.start() }
+        handler = Handler(handlerThread?.looper)
     }
 
     private fun createCameraPreviewSession() {
@@ -313,6 +339,11 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
             backgroundThread?.quitSafely()
             backgroundThread = null
             backgroundHandler = null
+        }
+        handler?.let {
+            handlerThread?.quitSafely()
+            handlerThread = null
+            handler = null
         }
     }
 }

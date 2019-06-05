@@ -26,13 +26,18 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
 JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_changeFilter
         (JNIEnv *, jobject, jint);
 
+
+JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame(
+        JNIEnv  *jniEnv, jobject instance, jint n, jobject bufferY, jobject bufferU, jobject bufferV
+);
+
 /*
  * Class:     com_david_camerapush_ffmpeg_FFmpegHandler
  * Method:    pushCameraData
  * Signature: ([BI[BI[BI)I
  */
-JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraData
-        (JNIEnv *, jobject, jint, jbyteArray, jint, jbyteArray, jint, jbyteArray, jint);
+/*JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_pushCameraData
+        (JNIEnv *, jobject, jint, jbyteArray, jint, jbyteArray, jint, jbyteArray, jint);*/
 
 /*
  * Class:     com_david_camerapush_ffmpeg_FFmpegHandler
