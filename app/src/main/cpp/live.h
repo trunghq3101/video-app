@@ -28,7 +28,19 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_changeFilte
 
 
 JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame(
-        JNIEnv  *jniEnv, jobject instance, jint n, jobject bufferY, jobject bufferU, jobject bufferV
+        JNIEnv *jniEnv, jobject instance,
+        jint n,
+        jint w,
+        jint h,
+        jbyteArray bufferY,
+        jint pixY,
+        jint rowY,
+        jbyteArray bufferU,
+        jint pixU,
+        jint rowU,
+        jbyteArray bufferV,
+        jint pixV,
+        jint rowV
 );
 
 /*

@@ -1,7 +1,5 @@
 package com.example.videoapp.utils
 
-import java.nio.ByteBuffer
-
 class FFmpegHandler private constructor() {
 
     private class SingletonInstance {
@@ -14,9 +12,17 @@ class FFmpegHandler private constructor() {
 
     external fun encodeFrame(
         n: Int,
-        bufferY: ByteBuffer,
-        bufferU: ByteBuffer,
-        bufferV: ByteBuffer
+        w: Int,
+        h: Int,
+        bufferY: ByteArray,
+        pixY: Int,
+        rowY: Int,
+        bufferU: ByteArray,
+        pixU: Int,
+        rowU: Int,
+        bufferV: ByteArray,
+        pixV: Int,
+        rowV: Int
     ): Int
 
     /*external fun pushCameraData(

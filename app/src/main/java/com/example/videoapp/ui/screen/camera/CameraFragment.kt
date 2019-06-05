@@ -80,17 +80,39 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                 val image = reader?.acquireLatestImage()
                 image?.let {
                     val planes = it.planes
+                    val bytes0 = ByteArray(planes[0].buffer.capacity())
+                    val bytes1 = ByteArray(planes[1].buffer.capacity())
+                    val bytes2 = ByteArray(planes[2].buffer.capacity())
+                    planes[0].buffer.get(bytes0)
+                    planes[1].buffer.get(bytes1)
+                    planes[2].buffer.get(bytes2)
                     FFmpegHandler.instance.encodeFrame(
                         0,
-                        planes[0].buffer,
-                        planes[1].buffer,
-                        planes[2].buffer
+                        it.width,
+                        it.height,
+                        bytes0,
+                        planes[0].pixelStride,
+                        planes[0].rowStride,
+                        bytes1,
+                        planes[1].pixelStride,
+                        planes[1].rowStride,
+                        bytes2,
+                        planes[2].pixelStride,
+                        planes[2].rowStride
                     )
                     FFmpegHandler.instance.encodeFrame(
-                        1,
-                        planes[0].buffer,
-                        planes[1].buffer,
-                        planes[2].buffer
+                        0,
+                        it.width,
+                        it.height,
+                        bytes0,
+                        planes[0].pixelStride,
+                        planes[0].rowStride,
+                        bytes1,
+                        planes[1].pixelStride,
+                        planes[1].rowStride,
+                        bytes2,
+                        planes[2].pixelStride,
+                        planes[2].rowStride
                     )
                     it.close()
                 }
