@@ -1,5 +1,7 @@
 package com.example.videoapp.utils
 
+import java.nio.ByteBuffer
+
 class FFmpegHandler private constructor() {
 
     private class SingletonInstance {
@@ -14,13 +16,13 @@ class FFmpegHandler private constructor() {
         n: Int,
         w: Int,
         h: Int,
-        bufferY: ByteArray,
+        bufferY: ByteBuffer,
         pixY: Int,
         rowY: Int,
-        bufferU: ByteArray,
+        bufferU: ByteBuffer,
         pixU: Int,
         rowU: Int,
-        bufferV: ByteArray,
+        bufferV: ByteBuffer,
         pixV: Int,
         rowV: Int
     ): Int

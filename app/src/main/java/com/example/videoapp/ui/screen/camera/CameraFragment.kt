@@ -10,6 +10,7 @@ import android.media.ImageReader
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import android.util.Size
 import android.view.*
 import androidx.fragment.app.Fragment
@@ -90,27 +91,27 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                         0,
                         it.width,
                         it.height,
-                        bytes0,
+                        planes[0].buffer,
                         planes[0].pixelStride,
                         planes[0].rowStride,
-                        bytes1,
+                        planes[1].buffer,
                         planes[1].pixelStride,
                         planes[1].rowStride,
-                        bytes2,
+                        planes[2].buffer,
                         planes[2].pixelStride,
                         planes[2].rowStride
                     )
                     FFmpegHandler.instance.encodeFrame(
-                        0,
+                        1,
                         it.width,
                         it.height,
-                        bytes0,
+                        planes[0].buffer,
                         planes[0].pixelStride,
                         planes[0].rowStride,
-                        bytes1,
+                        planes[1].buffer,
                         planes[1].pixelStride,
                         planes[1].rowStride,
-                        bytes2,
+                        planes[2].buffer,
                         planes[2].pixelStride,
                         planes[2].rowStride
                     )

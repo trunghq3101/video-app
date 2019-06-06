@@ -32,13 +32,13 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
         jint n,
         jint w,
         jint h,
-        jbyteArray bufferY,
+        jobject bufferY,
         jint pixY,
         jint rowY,
-        jbyteArray bufferU,
+        jobject bufferU,
         jint pixU,
         jint rowU,
-        jbyteArray bufferV,
+        jobject bufferV,
         jint pixV,
         jint rowV
 );

@@ -21,13 +21,11 @@ AVStream *video_st;
 AVCodecContext *pCodecCtx;
 AVCodec *pCodec;
 AVPacket enc_pkt;
-AVFrame *pFrameYUV;
 AVFilterContext *buffersink_ctx;
 AVFilterContext **buffersrc_ctx;
 AVFilterGraph *filter_graph;
 AVFilter *buffersrc;
 AVFilter *buffersink;
-AVFrame *picref;
 int filter_change = 1;
 int videoInputs = 2;
 const char *filter_descr = "[0:v][1:v]overlay=0:0[v]";
@@ -37,7 +35,7 @@ const char *filter_negate = "negate[out]";
 const char *filter_edge = "edgedetect[out]";
 const char *filter_split4 = "scale=iw/2:ih/2[in_tmp];[in_tmp]split=4[in_1][in_2][in_3][in_4];[in_1]pad=iw*2:ih*2[a];[a][in_2]overlay=w[b];[b][in_3]overlay=0:h[d];[d][in_4]overlay=w:h[out]";
 const char *filter_vintage = "curves=vintage";
-const enum AVPixelFormat FRAME_FMT = AV_PIX_FMT_YUV420P;
+const enum AVPixelFormat OUTPUT_FMT = AV_PIX_FMT_YUV420P;
 typedef enum {
     FILTER_NULL = 48,
     FILTER_MIRROR,
@@ -54,57 +52,6 @@ int uv_length;
 int width = 640;
 int height = 480;
 int fps = 15;
-
-/*
- * Class:     com_david_camerapush_ffmpeg_FFmpegHandler
- * Method:    init  初始化ffmpeg相关,准备推送
- * Signature: (Ljava/lang/String;)I rmtp服务地址
- */
-JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_changeFilter(
-        JNIEnv *jniEnv, jobject instance, jint curFilter) {
-    switch (48 + curFilter % 6) {
-        case FILTER_NULL: {
-            printf("\nnow using null filter\nPress other numbers for other filters:");
-            filter_change = 1;
-            filter_descr = "null";
-            break;
-        }
-        case FILTER_MIRROR: {
-            printf("\nnow using mirror filter\nPress other numbers for other filters:");
-            filter_change = 1;
-            filter_descr = filter_mirror;
-            break;
-        }
-        case FILTER_NEGATE: {
-            printf("\nnow using negate filter\nPress other numbers for other filters:");
-            filter_change = 1;
-            filter_descr = filter_negate;
-            break;
-        }
-        case FILTER_EDGE: {
-            printf("\nnow using edge filter\nPress other numbers for other filters:");
-            filter_change = 1;
-            filter_descr = filter_edge;
-            break;
-        }
-        case FILTER_SPLIT4: {
-            printf("\nnow using split4 filter\nPress other numbers for other filters:");
-            filter_change = 1;
-            filter_descr = filter_split4;
-            break;
-        }
-        case FILTER_VINTAGE: {
-            printf("\nnow using vintage filter\nPress other numbers for other filters:");
-            filter_change = 1;
-            filter_descr = filter_vintage;
-            break;
-        }
-        default: {
-            break;
-        }
-    }
-    return 0;
-}
 
 static int apply_filters(/*AVFormatContext *ifmt_ctx*/) {
     char args[512];
@@ -198,6 +145,118 @@ static int apply_filters(/*AVFormatContext *ifmt_ctx*/) {
     return 0;
 }
 
+static int convertFrame(AVFrame *pSource, AVFrame *pDest) {
+    struct SwsContext *img_convert_ctx;
+
+    img_convert_ctx = sws_getContext(
+            pSource->width,
+            pSource->height,
+            (enum AVPixelFormat) pSource->format,
+            pDest->width,
+            pDest->height,
+            (enum AVPixelFormat) pDest->format,
+            SWS_BICUBIC, NULL, NULL, NULL);
+
+    if (img_convert_ctx == NULL) return -1;
+
+    sws_scale(
+            img_convert_ctx,
+            pSource->data,
+            pSource->linesize,
+            0,
+            pSource->height,
+            pDest->data,
+            pDest->linesize);
+
+    sws_freeContext(img_convert_ctx);
+
+    return 0;
+}
+
+static int processFrame(int n, AVFrame *pOutFrame) {
+    int ret = 0;
+    AVFrame *pFilteredFrame = av_frame_alloc();;
+
+    if (filter_change) {
+        apply_filters();
+    }
+
+    filter_change = 0;
+
+    ret = av_buffersrc_add_frame(buffersrc_ctx[n], pOutFrame);
+    if (ret < 0) {
+        printf("Error while feeding the filtergraph\n");
+        goto END;
+    }
+
+    ret = av_buffersink_get_frame_flags(buffersink_ctx, pFilteredFrame, 0);
+    if (ret < 0) {
+        printf("Error getting frame %s \n", av_err2str(ret));
+        goto END;
+    }
+
+    if (pFilteredFrame) {
+        ret = convertFrame(pFilteredFrame, pOutFrame);
+        if (ret != 0) goto END;
+
+        /*img_convert_ctx = sws_getContext(
+                picref->width,
+                picref->height,
+                (enum AVPixelFormat) picref->format,
+                pCodecCtx->width,
+                pCodecCtx->height,
+                OUTPUT_FMT,
+                SWS_BICUBIC, NULL, NULL, NULL);
+        sws_scale(
+                img_convert_ctx,
+                (const uint8_t *const *) picref->data,
+                picref->linesize,
+                0,
+                pCodecCtx->height,
+                pOutFrame->data,
+                pOutFrame->linesize);
+        sws_freeContext(img_convert_ctx);
+        pOutFrame->width = picref->width;
+        pOutFrame->height = picref->height;
+        pOutFrame->format = OUTPUT_FMT;*/
+    }
+    av_frame_free(pFilteredFrame);
+
+    enc_pkt.data = NULL;
+    enc_pkt.size = 0;
+
+    ret = avcodec_send_frame(pCodecCtx, pOutFrame);
+    if (ret != 0) {
+        LOGE("avcodec_send_frame error");
+        goto END;
+    }
+
+    ret = avcodec_receive_packet(pCodecCtx, &enc_pkt);
+    if (ret != 0 || enc_pkt.size <= 0) {
+        LOGE("avcodec_receive_packet error %s", av_err2str(ret));
+        goto END;
+    }
+
+    enc_pkt.stream_index = video_st->index;
+    enc_pkt.pts = count * (video_st->time_base.den) / ((video_st->time_base.num) * fps);
+    enc_pkt.dts = enc_pkt.pts;
+    enc_pkt.duration = (video_st->time_base.den) / ((video_st->time_base.num) * fps);
+    enc_pkt.pos = -1;
+
+    ret = av_interleaved_write_frame(ofmt_ctx, &enc_pkt);
+    if (ret != 0) {
+        LOGE("av_interleaved_write_frame failed");
+        goto END;
+    }
+    count++;
+
+    END:
+    av_frame_free(pFilteredFrame);
+    av_packet_unref(&enc_pkt);
+
+    return ret;
+}
+
 JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
         (JNIEnv *jniEnv, jobject instance, jstring url) {
 
@@ -227,7 +286,7 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
 
     pCodecCtx = avcodec_alloc_context3(pCodec);
     pCodecCtx->codec_id = pCodec->id;
-    pCodecCtx->pix_fmt = FRAME_FMT;
+    pCodecCtx->pix_fmt = OUTPUT_FMT;
     pCodecCtx->codec_type = AVMEDIA_TYPE_VIDEO;
     pCodecCtx->width = width;
     pCodecCtx->height = height;
@@ -279,18 +338,64 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
     return 0;
 }
 
+JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_changeFilter(
+        JNIEnv *jniEnv, jobject instance, jint curFilter) {
+    switch (48 + curFilter % 6) {
+        case FILTER_NULL: {
+            printf("\nnow using null filter\nPress other numbers for other filters:");
+            filter_change = 1;
+            filter_descr = "null";
+            break;
+        }
+        case FILTER_MIRROR: {
+            printf("\nnow using mirror filter\nPress other numbers for other filters:");
+            filter_change = 1;
+            filter_descr = filter_mirror;
+            break;
+        }
+        case FILTER_NEGATE: {
+            printf("\nnow using negate filter\nPress other numbers for other filters:");
+            filter_change = 1;
+            filter_descr = filter_negate;
+            break;
+        }
+        case FILTER_EDGE: {
+            printf("\nnow using edge filter\nPress other numbers for other filters:");
+            filter_change = 1;
+            filter_descr = filter_edge;
+            break;
+        }
+        case FILTER_SPLIT4: {
+            printf("\nnow using split4 filter\nPress other numbers for other filters:");
+            filter_change = 1;
+            filter_descr = filter_split4;
+            break;
+        }
+        case FILTER_VINTAGE: {
+            printf("\nnow using vintage filter\nPress other numbers for other filters:");
+            filter_change = 1;
+            filter_descr = filter_vintage;
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+    return 0;
+}
+
 JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame(
         JNIEnv *jniEnv, jobject instance,
         jint n,
         jint w,
         jint h,
-        jbyteArray bufferY,
+        jobject bufferY,
         jint pixY,
         jint rowY,
-        jbyteArray bufferU,
+        jobject bufferU,
         jint pixU,
         jint rowU,
-        jbyteArray bufferV,
+        jobject bufferV,
         jint pixV,
         jint rowV
 ) {
@@ -303,7 +408,7 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
             pCodecCtx->height,
             1);
     uint8_t *buffers = (uint8_t *) av_malloc(picture_size);
-    pFrameYUV = av_frame_alloc();
+    AVFrame *pFrameYUV = av_frame_alloc();
     av_image_fill_arrays(
             pFrameYUV->data,
             pFrameYUV->linesize,
@@ -313,22 +418,22 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
             pCodecCtx->height,
             1);
 
-    jbyte *yin = (*jniEnv)->GetByteArrayElements(jniEnv, bufferY, NULL);
-    jbyte *uin = (*jniEnv)->GetByteArrayElements(jniEnv, bufferU, NULL);
-    jbyte *vin = (*jniEnv)->GetByteArrayElements(jniEnv, bufferV, NULL);
+    jbyte *yin = (*jniEnv)->GetDirectBufferAddress(jniEnv, bufferY);
+    jbyte *uin = (*jniEnv)->GetDirectBufferAddress(jniEnv, bufferU);
+    jbyte *vin = (*jniEnv)->GetDirectBufferAddress(jniEnv, bufferV);
     int srcIndex = 0;
     int dstIndex = 0;
-    jbyte *yArray = av_calloc((size_t) (w * h + 1), sizeof(jbyte));
-    jbyte *uArray = av_calloc((size_t) (w * h / 4 + 1), sizeof(jbyte));
-    jbyte *vArray = av_calloc((size_t) (w * h / 4 + 1), sizeof(jbyte));
+    jbyte *yArray = av_malloc_array((size_t) (w * h + 1), sizeof(jbyte));
+    jbyte *uArray = av_malloc_array((size_t) (w * h / 4 + 1), sizeof(jbyte));
+    jbyte *vArray = av_malloc_array((size_t) (w * h / 4 + 1), sizeof(jbyte));
 
-    for (int i = 0; i < h; i ++) {
-        for (int j = 0; j < w; j ++) {
+    for (int i = 0; i < h; i = i + 1) {
+        for (int j = 0; j < w; j = j + 1) {
             yArray[dstIndex] = yin[srcIndex];
             dstIndex ++;
             srcIndex ++;
         }
-        srcIndex += rowY;
+        srcIndex += rowY - w;
     }
     srcIndex = 0;
     dstIndex = 0;
@@ -354,108 +459,53 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
         }
         if (pixV == 2) {
             srcIndex += rowV - w;
-        } else if (pixU == 1) {
+        } else if (pixV == 1) {
             srcIndex += rowV - w / 2;
         }
     }
 
-    /*pFrameYUV->data[0] = yin;
-    pFrameYUV->data[1] = uin;
-    pFrameYUV->data[2] = vin;*/
-    /*pFrameYUV->data[0] = *yArray;
-    pFrameYUV->data[1] = *uArray;
-    pFrameYUV->data[2] = *vArray;*/
-    memcpy(pFrameYUV->data[0], yArray, (size_t) (w * h));
-    memcpy(pFrameYUV->data[1], uArray, (size_t) (w * h / 4));
-    memcpy(pFrameYUV->data[2], vArray, (size_t) (w * h / 4));
+    pFrameYUV->data[0] = (uint8_t *) yArray;
+    pFrameYUV->data[1] = (uint8_t *) uArray;
+    pFrameYUV->data[2] = (uint8_t *) vArray;
     pFrameYUV->pts = count;
-    pFrameYUV->format = FRAME_FMT;
-    pFrameYUV->width = yuv_width;
-    pFrameYUV->height = yuv_height;
+    pFrameYUV->format = AV_PIX_FMT_YUV420P;
+    pFrameYUV->width = w;
+    pFrameYUV->height = h;
+    pFrameYUV->linesize[0] = w;
+    pFrameYUV->linesize[1] = w / 2;
+    pFrameYUV->linesize[2] = w / 2;
 
-    // FILTER
-    struct SwsContext *img_convert_ctx;
+    AVFrame *pOutFrame = av_frame_alloc();
+    pOutFrame->width = pCodecCtx->width;
+    pOutFrame->height = pCodecCtx->height;
+    pOutFrame->format = pCodecCtx->pix_fmt;
+    pOutFrame->linesize[0] = pCodecCtx->width;
+    pOutFrame->linesize[1] = pCodecCtx->width / 2;
+    pOutFrame->linesize[2] = pCodecCtx->width / 2;
 
-    if (filter_change) {
-        apply_filters();
-    }
+    ret = convertFrame(pFrameYUV, pOutFrame);
+    if (ret != 0) goto END;
 
-    filter_change = 0;
-
-    ret = av_buffersrc_add_frame(buffersrc_ctx[n], pFrameYUV);
-    if (ret < 0) {
-        printf("Error while feeding the filtergraph\n");
-        goto END;
-    }
-
-    picref = av_frame_alloc();
-
-    ret = av_buffersink_get_frame_flags(buffersink_ctx, picref, 0);
-    if (ret < 0) {
-        printf("Error getting frame %s \n", av_err2str(ret));
-        goto END;
-    }
-
-    if (picref) {
-        img_convert_ctx = sws_getContext(
-                picref->width,
-                picref->height,
-                (enum AVPixelFormat) picref->format,
-                pCodecCtx->width,
-                pCodecCtx->height,
-                FRAME_FMT,
-                SWS_BICUBIC, NULL, NULL, NULL);
-        sws_scale(
-                img_convert_ctx,
-                (const uint8_t *const *) picref->data,
-                picref->linesize,
-                0,
-                pCodecCtx->height,
-                pFrameYUV->data,
-                pFrameYUV->linesize);
-        sws_freeContext(img_convert_ctx);
-        pFrameYUV->width = picref->width;
-        pFrameYUV->height = picref->height;
-        pFrameYUV->format = FRAME_FMT;
-    }
-    av_frame_unref(picref);
-
-    enc_pkt.data = NULL;
-    enc_pkt.size = 0;
-
-    ret = avcodec_send_frame(pCodecCtx, pFrameYUV);
-    if (ret != 0) {
-        LOGE("avcodec_send_frame error");
-        goto END;
-    }
-    av_frame_free(&pFrameYUV);
-
-    ret = avcodec_receive_packet(pCodecCtx, &enc_pkt);
-    if (ret != 0 || enc_pkt.size <= 0) {
-        LOGE("avcodec_receive_packet error %s", av_err2str(ret));
-        goto END;
-    }
-
-    enc_pkt.stream_index = video_st->index;
-    enc_pkt.pts = count * (video_st->time_base.den) / ((video_st->time_base.num) * fps);
-    enc_pkt.dts = enc_pkt.pts;
-    enc_pkt.duration = (video_st->time_base.den) / ((video_st->time_base.num) * fps);
-    enc_pkt.pos = -1;
-
-    ret = av_interleaved_write_frame(ofmt_ctx, &enc_pkt);
-    if (ret != 0) {
-        LOGE("av_interleaved_write_frame failed");
-        goto END;
-    }
-    count++;
+    ret = processFrame(n, pOutFrame);
+    if (ret != 0) goto END;
 
     END:
-    av_packet_unref(&enc_pkt);
+
     av_frame_free(&pFrameYUV);
-    av_free(buffers);
-    av_free(yArray);
-    av_free(uArray);
-    av_free(vArray);
+    av_frame_free(&pOutFrame);
+
+    if (buffers != NULL) {
+        av_free(buffers);
+    }
+    if (yArray != NULL) {
+        av_free(yArray);
+    }
+    if (uArray != NULL) {
+        av_free(uArray);
+    }
+    if (vArray != NULL) {
+        av_free(vArray);
+    }
 
     return ret;
 }
@@ -575,3 +625,4 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_close
     filter_change = 1;
     return 0;
 }
+
