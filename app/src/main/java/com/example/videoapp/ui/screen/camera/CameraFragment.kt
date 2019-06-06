@@ -10,7 +10,6 @@ import android.media.ImageReader
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
-import android.util.Log
 import android.util.Size
 import android.view.*
 import androidx.fragment.app.Fragment
@@ -23,6 +22,7 @@ import com.example.videoapp.utils.FFmpegHandler
 import kotlinx.android.synthetic.main.camera_fragment.*
 import org.koin.android.viewmodel.ext.android.viewModel
 import pub.devrel.easypermissions.EasyPermissions
+import java.nio.ByteBuffer
 import java.util.concurrent.Semaphore
 
 class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
@@ -81,12 +81,12 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                 val image = reader?.acquireLatestImage()
                 image?.let {
                     val planes = it.planes
-                    val bytes0 = ByteArray(planes[0].buffer.capacity())
+                    /*val bytes0 = ByteArray(planes[0].buffer.capacity())
                     val bytes1 = ByteArray(planes[1].buffer.capacity())
                     val bytes2 = ByteArray(planes[2].buffer.capacity())
                     planes[0].buffer.get(bytes0)
                     planes[1].buffer.get(bytes1)
-                    planes[2].buffer.get(bytes2)
+                    planes[2].buffer.get(bytes2)*/
                     FFmpegHandler.instance.encodeFrame(
                         0,
                         it.width,
@@ -101,7 +101,10 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                         planes[2].pixelStride,
                         planes[2].rowStride
                     )
-                    FFmpegHandler.instance.encodeFrame(
+                    val buffer = ByteBuffer.allocateDirect(mySurfaceView.myBitmap.rowBytes * mySurfaceView.myBitmap.height)
+                    mySurfaceView.myBitmap.copyPixelsToBuffer(buffer)
+                    FFmpegHandler.instance.encodeARGBFrame(1, it.width, it.height, buffer)
+                    /*FFmpegHandler.instance.encodeFrame(
                         1,
                         it.width,
                         it.height,
@@ -114,7 +117,7 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
                         planes[2].buffer,
                         planes[2].pixelStride,
                         planes[2].rowStride
-                    )
+                    )*/
                     it.close()
                 }
             }
