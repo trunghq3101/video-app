@@ -43,6 +43,14 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
         jint rowV
 );
 
+JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeARGBFrame(
+        JNIEnv *jniEnv, jobject instance,
+        jint n,
+        jint w,
+        jint h,
+        jobject byteArray
+);
+
 /*
  * Class:     com_david_camerapush_ffmpeg_FFmpegHandler
  * Method:    pushCameraData

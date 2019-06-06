@@ -27,6 +27,13 @@ class FFmpegHandler private constructor() {
         rowV: Int
     ): Int
 
+    external fun encodeARGBFrame(
+        n: Int,
+        w: Int,
+        h: Int,
+        bytes: ByteBuffer
+    ): Int
+
     /*external fun pushCameraData(
         n: Int,
         buffer: ByteArray,
