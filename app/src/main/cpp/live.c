@@ -149,6 +149,20 @@ static int convertFrame(AVFrame *pSource, AVFrame *pDest) {
     struct SwsContext *img_convert_ctx;
     int ret = 0;
 
+    av_frame_free(&pDest);
+    pDest = av_frame_alloc();
+    pDest->width = pCodecCtx->width;
+    pDest->height = pCodecCtx->height;
+    pDest->format = pCodecCtx->pix_fmt;
+    ret = av_frame_get_buffer(pDest, 0);
+    if (ret != 0) {
+        LOGE("Error getting frame buffer %s\n", av_err2str(ret));
+        return -1;
+    }
+    pDest->linesize[0] = pCodecCtx->width;
+    pDest->linesize[1] = pCodecCtx->width / 2;
+    pDest->linesize[2] = pCodecCtx->width / 2;
+
     img_convert_ctx = sws_getContext(
             pSource->width,
             pSource->height,
@@ -176,7 +190,7 @@ static int convertFrame(AVFrame *pSource, AVFrame *pDest) {
 
 static int processFrame(int n, AVFrame *pOutFrame) {
     int ret = 0;
-    AVFrame *pFilteredFrame = av_frame_alloc();;
+    AVFrame *pFilteredFrame = av_frame_alloc();;\
 
     if (filter_change) {
         apply_filters();
@@ -198,7 +212,7 @@ static int processFrame(int n, AVFrame *pOutFrame) {
 
     if (pFilteredFrame) {
         ret = convertFrame(pFilteredFrame, pOutFrame);
-        if (ret != 0) goto END;
+        if (ret < 0) goto END;
 
         /*img_convert_ctx = sws_getContext(
                 picref->width,
@@ -481,15 +495,9 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
     pFrameYUV->linesize[2] = w / 2;
 
     AVFrame *pOutFrame = av_frame_alloc();
-    pOutFrame->width = pCodecCtx->width;
-    pOutFrame->height = pCodecCtx->height;
-    pOutFrame->format = pCodecCtx->pix_fmt;
-    pOutFrame->linesize[0] = pCodecCtx->width;
-    pOutFrame->linesize[1] = pCodecCtx->width / 2;
-    pOutFrame->linesize[2] = pCodecCtx->width / 2;
 
     ret = convertFrame(pFrameYUV, pOutFrame);
-    if (ret != 0) goto END;
+    if (ret < 0) goto END;
 
     ret = processFrame(n, pOutFrame);
     if (ret != 0) goto END;
@@ -556,30 +564,9 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeARGBF
     pFrameARGB->linesize[0] = w * h * 4;
 
     AVFrame *pOutFrame = av_frame_alloc();
-    picture_size = av_image_get_buffer_size(
-            pCodecCtx->pix_fmt,
-            pCodecCtx->width,
-            pCodecCtx->height,
-            1);
-    buffers = (uint8_t *) av_malloc(picture_size);
-    av_image_fill_arrays(
-            pOutFrame->data,
-            pOutFrame->linesize,
-            buffers,
-            pCodecCtx->pix_fmt,
-            pCodecCtx->width,
-            pCodecCtx->height,
-            1);
-
-    pOutFrame->width = pCodecCtx->width;
-    pOutFrame->height = pCodecCtx->height;
-    pOutFrame->format = pCodecCtx->pix_fmt;
-    pOutFrame->linesize[0] = pCodecCtx->width;
-    pOutFrame->linesize[1] = pCodecCtx->width / 2;
-    pOutFrame->linesize[2] = pCodecCtx->width / 2;
 
     ret = convertFrame(pFrameARGB, pOutFrame);
-    if (ret != 0) goto END;
+    if (ret < 0) goto END;
 
     ret = processFrame(n, pOutFrame);
     if (ret != 0) goto END;
