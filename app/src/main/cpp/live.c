@@ -28,7 +28,7 @@ AVFilter *buffersrc;
 AVFilter *buffersink;
 int filter_change = 1;
 int videoInputs = 2;
-const char *filter_descr = "[0:v][1:v]overlay=0:0[v]";
+const char *filter_descr = "[1:v]colorkey=0x000000[ckout];[0:v][ckout]overlay=0:0[v]";
 const char *filter_logo = "movie=logo.jpeg[wm];[in][wm]overlay=5:5[out]";
 const char *filter_mirror = "crop=iw/2:ih:0:0,split[left][tmp];[tmp]hflip[right];[left]pad=iw*2[a];[a][right]overlay=w";
 const char *filter_negate = "negate[out]";
@@ -285,6 +285,7 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_init
     yuv_height = height;
     y_length = width * height;
     uv_length = width * height / 4;
+
     //output initialize
     int ret = avformat_alloc_output_context2(&ofmt_ctx, NULL, "flv", out_url);
     if (ret < 0) {
@@ -416,11 +417,6 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
 ) {
     int ret = 0;
 
-    if (ofmt_ctx->pb == NULL) {
-        ret = -1;
-        goto END;
-    }
-
     int picture_size = av_image_get_buffer_size(
             AV_PIX_FMT_YUV420P,
             w,
@@ -428,6 +424,7 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
             1);
     uint8_t *buffers = (uint8_t *) av_malloc(picture_size);
     AVFrame *pFrameYUV = av_frame_alloc();
+    AVFrame *pOutFrame = av_frame_alloc();
     av_image_fill_arrays(
             pFrameYUV->data,
             pFrameYUV->linesize,
@@ -445,6 +442,16 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
     jbyte *yArray = av_malloc_array((size_t) (w * h + 1), sizeof(jbyte));
     jbyte *uArray = av_malloc_array((size_t) (w * h / 4 + 1), sizeof(jbyte));
     jbyte *vArray = av_malloc_array((size_t) (w * h / 4 + 1), sizeof(jbyte));
+
+    if (ofmt_ctx == NULL) {
+        ret = -1;
+        goto END;
+    }
+
+    if (ofmt_ctx->pb == NULL) {
+        ret = -1;
+        goto END;
+    }
 
     for (int i = 0; i < h; i = i + 1) {
         for (int j = 0; j < w; j = j + 1) {
@@ -494,8 +501,6 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
     pFrameYUV->linesize[1] = w / 2;
     pFrameYUV->linesize[2] = w / 2;
 
-    AVFrame *pOutFrame = av_frame_alloc();
-
     ret = convertFrame(pFrameYUV, pOutFrame);
     if (ret < 0) goto END;
 
@@ -532,23 +537,19 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeARGBF
 ) {
     int ret = 0;
 
-    if (ofmt_ctx->pb == NULL) {
-        ret = -1;
-        goto END;
-    }
-
     int picture_size = av_image_get_buffer_size(
-            AV_PIX_FMT_ARGB,
+            AV_PIX_FMT_RGBA,
             w,
             h,
             1);
     uint8_t *buffers = (uint8_t *) av_malloc(picture_size);
     AVFrame *pFrameARGB = av_frame_alloc();
+    AVFrame *pOutFrame = av_frame_alloc();
     av_image_fill_arrays(
             pFrameARGB->data,
             pFrameARGB->linesize,
             buffers,
-            AV_PIX_FMT_ARGB,
+            AV_PIX_FMT_RGBA,
             w,
             h,
             1);
@@ -556,14 +557,22 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeARGBF
 
     uint8_t *in = (*jniEnv)->GetDirectBufferAddress(jniEnv, buffer);
 
+    if (ofmt_ctx == NULL) {
+        ret = -1;
+        goto END;
+    }
+
+    if (ofmt_ctx->pb == NULL) {
+        ret = -1;
+        goto END;
+    }
+
     pFrameARGB->data[0] = in;
     pFrameARGB->pts = count;
-    pFrameARGB->format = AV_PIX_FMT_ARGB;
+    pFrameARGB->format = AV_PIX_FMT_RGBA;
     pFrameARGB->width = w;
     pFrameARGB->height = h;
-    pFrameARGB->linesize[0] = w * h * 4;
-
-    AVFrame *pOutFrame = av_frame_alloc();
+    pFrameARGB->linesize[0] = w * 4;
 
     ret = convertFrame(pFrameARGB, pOutFrame);
     if (ret < 0) goto END;
