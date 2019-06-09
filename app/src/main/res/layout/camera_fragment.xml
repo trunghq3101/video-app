@@ -7,7 +7,7 @@
     tools:context=".ui.screen.camera.CameraFragment"
     android:id="@+id/constraintCamera">
 
-    <TextureView
+    <com.example.videoapp.utils.AutoFitTextureView
             android:id="@+id/textureCamera"
             android:layout_width="0dp"
             android:layout_height="0dp"

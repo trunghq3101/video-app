@@ -16,8 +16,8 @@ import com.example.videoapp.R
 class MySurfaceView: View {
     private lateinit var paint: Paint
     private lateinit var icon: Bitmap
-    lateinit var myBitmap: Bitmap
-    lateinit var myCanvas: Canvas
+    var myBitmap: Bitmap? = null
+    var myCanvas: Canvas? = null
 
     constructor(context: Context?) : super(context) {
         initView()
@@ -39,8 +39,10 @@ class MySurfaceView: View {
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
-        myCanvas.drawBitmap(icon, 10F, 10F, paint)
-        canvas?.drawBitmap(myBitmap, 0F, 0F, paint)
+        myCanvas?.drawBitmap(icon, 10F, 10F, paint)
+        myBitmap?.let {
+            canvas?.drawBitmap(it, 0F, 0F, paint)
+        }
     }
 
     /*override fun surfaceCreated(holder: SurfaceHolder) {
@@ -67,8 +69,13 @@ class MySurfaceView: View {
     private fun initView() {
         paint = Paint()
         icon = BitmapFactory.decodeResource(resources, R.drawable.ic_action_info)
-        myBitmap = Bitmap.createBitmap(640, 480, Bitmap.Config.ARGB_8888)
-        myCanvas = Canvas(myBitmap)
+    }
+
+    fun setBitmap(surfaceWidth: Int, surfaceHeight: Int) {
+        myBitmap = Bitmap.createBitmap(surfaceWidth, surfaceHeight, Bitmap.Config.ARGB_8888)
+        myBitmap?.let {
+            myCanvas = Canvas(it)
+        }
     }
 
     fun getNV21(inputWidth: Int, inputHeight: Int, scaled: Bitmap): ByteArray {

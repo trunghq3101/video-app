@@ -3,33 +3,75 @@ package com.example.videoapp.ui.screen.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.ImageFormat
-import android.graphics.SurfaceTexture
+import android.content.res.Configuration
 import android.hardware.camera2.*
 import android.media.ImageReader
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Size
+import android.util.SparseIntArray
 import android.view.*
+import android.view.Surface.*
 import androidx.fragment.app.Fragment
-import com.example.videoapp.R
 import com.example.videoapp.R.string
-import com.example.videoapp.data.constants.Constants.FRAGMENT_DIALOG
 import com.example.videoapp.data.constants.Constants.REQUEST_CAMERA_PERMISSION
-import com.example.videoapp.ui.dialog.ErrorDialog
 import com.example.videoapp.utils.FFmpegHandler
 import kotlinx.android.synthetic.main.camera_fragment.*
 import org.koin.android.viewmodel.ext.android.viewModel
 import pub.devrel.easypermissions.EasyPermissions
 import java.nio.ByteBuffer
+import java.util.*
 import java.util.concurrent.Semaphore
+import kotlin.collections.ArrayList
+import android.view.Surface.ROTATION_180
+import android.view.Surface.ROTATION_270
+import android.view.Surface.ROTATION_90
+import android.graphics.*
+
 
 class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     companion object {
         const val BACKGROUND_THREAD = "CameraBackground"
+        const val MAX_PREVIEW_WIDTH = 1920
+        const val MAX_PREVIEW_HEIGHT = 1080
         fun newInstance() = CameraFragment()
+        val ORIENTATIONS = SparseIntArray().apply {
+            append(ROTATION_0, 90)
+            append(ROTATION_90, 0)
+            append(ROTATION_180, 270)
+            append(ROTATION_270, 180)
+        }
+
+        private fun chooseOptimalSize(
+            choices: List<Size>,
+            textureViewWidth: Int,
+            textureViewHeight: Int,
+            maxWidth: Int,
+            maxHeight: Int,
+            aspectRatio: Size
+        ): Size {
+            val bigEnough = ArrayList<Size>()
+            val notBigEnough = ArrayList<Size>()
+            val w = aspectRatio.width
+            val h = aspectRatio.height
+            for (option in choices) {
+                if (option.width <= maxWidth && option.height <= maxHeight && option.height == option.width * h / w) {
+                    if (option.width >= textureViewWidth && option.height >= textureViewHeight) {
+                        bigEnough.add(option)
+                    } else {
+                        notBigEnough.add(option)
+                    }
+                }
+            }
+            return when {
+                bigEnough.size > 0 -> Collections.min(bigEnough, CompareSizesByArea())
+                notBigEnough.size > 0 -> Collections.max(notBigEnough, CompareSizesByArea())
+                else -> choices[0]
+            }
+        }
     }
+
 
     private val viewModel: CameraViewModel by viewModel()
     /**
@@ -46,10 +88,12 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     private var cameraId: String? = null
     private val surfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
-            openCamera()
+            openCamera(width, height)
+            mySurfaceView.setBitmap(width, height)
         }
 
         override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
+            configureTransform(width, height)
         }
 
         override fun onSurfaceTextureDestroyed(texture: SurfaceTexture) = false
@@ -77,115 +121,33 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     }
     private var imageReader: ImageReader? = null
     private val imageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
-            handler?.post {
-                val image = reader?.acquireLatestImage()
-                image?.let {
-                    val planes = it.planes
-                    /*val bytes0 = ByteArray(planes[0].buffer.capacity())
-                    val bytes1 = ByteArray(planes[1].buffer.capacity())
-                    val bytes2 = ByteArray(planes[2].buffer.capacity())
-                    planes[0].buffer.get(bytes0)
-                    planes[1].buffer.get(bytes1)
-                    planes[2].buffer.get(bytes2)*/
-                    FFmpegHandler.instance.encodeFrame(
-                        0,
-                        it.width,
-                        it.height,
-                        planes[0].buffer,
-                        planes[0].pixelStride,
-                        planes[0].rowStride,
-                        planes[1].buffer,
-                        planes[1].pixelStride,
-                        planes[1].rowStride,
-                        planes[2].buffer,
-                        planes[2].pixelStride,
-                        planes[2].rowStride
-                    )
-                    val buffer = ByteBuffer.allocateDirect(mySurfaceView.myBitmap.rowBytes * mySurfaceView.myBitmap.height)
-                    mySurfaceView.myBitmap.copyPixelsToBuffer(buffer)
-                    FFmpegHandler.instance.encodeARGBFrame(1, it.width, it.height, buffer)
-                    /*FFmpegHandler.instance.encodeFrame(
-                        1,
-                        it.width,
-                        it.height,
-                        planes[0].buffer,
-                        planes[0].pixelStride,
-                        planes[0].rowStride,
-                        planes[1].buffer,
-                        planes[1].pixelStride,
-                        planes[1].rowStride,
-                        planes[2].buffer,
-                        planes[2].pixelStride,
-                        planes[2].rowStride
-                    )*/
-                    it.close()
-                }
-            }
-            /*val image = reader?.acquireLatestImage()
+        handler?.post {
+            val image = reader?.acquireLatestImage()
             image?.let {
                 val planes = it.planes
-                val w = it.width
-                val h = it.height
-                var dstIndex = 0
-                val yBytes = ByteArray(w * h)
-                val uBytes = ByteArray(w * h / 4)
-                val vBytes = ByteArray(w * h /4)
-                var uIndex = 0
-                var vIndex = 0
-                var pixelsStride = 0
-                var rowStride = 0
-                for (i in 0 until planes.size) {
-                    pixelsStride = planes[i].pixelStride
-                    rowStride = planes[i].rowStride
-                    val buffer = planes[i].buffer
-                    val bytes = ByteArray(buffer.capacity())
-                    buffer.get(bytes)
-                    var srcIndex = 0
-                    when (i) {
-                        0 -> {
-                            for (j in 0 until h) {
-                                System.arraycopy(bytes, srcIndex, yBytes, dstIndex, w)
-                                srcIndex += rowStride
-                                dstIndex += w
-                            }
-                        }
-                        1 -> {
-                            for (j in 0 until h / 2) {
-                                for (k in 0 until w / 2) {
-                                    uBytes[uIndex++] = bytes[srcIndex]
-                                    srcIndex += pixelsStride
-                                }
-                                if (pixelsStride == 2) {
-                                    srcIndex += rowStride - w
-                                } else if (pixelsStride == 1) {
-                                    srcIndex += rowStride - w / 2
-                                }
-                            }
-                        }
-                        2 -> {
-                            for (j in 0 until h / 2) {
-                                for (k in 0 until w / 2) {
-                                    vBytes[vIndex++] = bytes[srcIndex]
-                                    srcIndex += pixelsStride
-                                }
-                                if (pixelsStride == 2) {
-                                    srcIndex += rowStride - w
-                                } else if (pixelsStride == 1) {
-                                    srcIndex += rowStride - w / 2
-                                }
-                            }
-                        }
-                    }
-                }
-                handler?.post {
-                    FFmpegHandler.instance
-                        .pushCameraData(0, yBytes, yBytes.size, uBytes, uBytes.size, vBytes, vBytes.size)
-                    FFmpegHandler.instance
-                        .pushCameraData(1, yBytes, yBytes.size, uBytes, uBytes.size, vBytes, vBytes.size)
+                FFmpegHandler.instance.encodeFrame(
+                    0,
+                    it.width,
+                    it.height,
+                    planes[0].buffer,
+                    planes[0].pixelStride,
+                    planes[0].rowStride,
+                    planes[1].buffer,
+                    planes[1].pixelStride,
+                    planes[1].rowStride,
+                    planes[2].buffer,
+                    planes[2].pixelStride,
+                    planes[2].rowStride
+                )
+                mySurfaceView.myBitmap?.let { bitmap ->
+                    val buffer = ByteBuffer.allocateDirect(bitmap.rowBytes * bitmap.height)
+                    bitmap.copyPixelsToBuffer(buffer)
+                    FFmpegHandler.instance.encodeARGBFrame(1, bitmap.width, bitmap.height, buffer)
                 }
                 it.close()
-            }*/
+            }
         }
+    }
     private var handlerThread: HandlerThread? = null
     private var handler: Handler? = null
     private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
@@ -196,12 +158,15 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         ) {
         }
     }
+    private var sensorOrientation: Int? = null
+    private var deviceOrientation: Int? = null
+    private var characteristics: CameraCharacteristics? = null
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        return inflater.inflate(R.layout.camera_fragment, container, false)
+        return inflater.inflate(com.example.videoapp.R.layout.camera_fragment, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -227,7 +192,7 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
 
         startBackgroundThread()
         if (textureCamera.isAvailable) {
-            openCamera()
+            openCamera(textureCamera.width, textureCamera.height)
         } else {
             textureCamera.surfaceTextureListener = surfaceTextureListener
         }
@@ -236,7 +201,6 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     override fun onPause() {
         closeCamera()
         closeBackgroundThread()
-        FFmpegHandler.instance.close()
         super.onPause()
     }
 
@@ -249,8 +213,14 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     }
 
     @SuppressLint("MissingPermission")
-    private fun openCamera() {
-        if (!EasyPermissions.hasPermissions(requireContext(), Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE)) {
+    private fun openCamera(width: Int, height: Int) {
+        if (!EasyPermissions.hasPermissions(
+                requireContext(),
+                Manifest.permission.CAMERA,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            )
+        ) {
             EasyPermissions.requestPermissions(
                 this,
                 getString(string.camera_permission),
@@ -261,7 +231,8 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
             )
             return
         }
-        setupCamera()
+        setupCamera(width, height)
+        configureTransform(width, height)
         val manager = activity?.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         try {
             manager.openCamera(cameraId, stateCallback, backgroundHandler)
@@ -270,33 +241,79 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         }
     }
 
-    private fun setupCamera() {
+    private fun setupCamera(width: Int, height: Int) {
         val manager = activity?.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        try {
-            for (cameraId in manager.cameraIdList) {
-                val characteristics = manager.getCameraCharacteristics(cameraId)
-                // We don't use a front facing camera in this sample.
-                val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
-                if (facing != null && facing != CameraCharacteristics.LENS_FACING_BACK) {
-                    continue
-                }
-                val map = characteristics.get(
-                    CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
-                ) ?: continue
-                this.previewSize = map.getOutputSizes(SurfaceTexture::class.java)[0]
-                this.cameraId = cameraId
-                imageReader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 2).apply {
-                    setOnImageAvailableListener(imageAvailableListener, backgroundHandler)
-                }
-                return
+        for (cameraId in manager.cameraIdList) {
+            characteristics = manager.getCameraCharacteristics(cameraId)
+            // We don't use a front facing camera in this sample.
+            val facing = characteristics?.get(CameraCharacteristics.LENS_FACING)
+            if (facing != null && facing != CameraCharacteristics.LENS_FACING_BACK) {
+                continue
             }
-        } catch (e: CameraAccessException) {
-            e.printStackTrace()
-        } catch (e: NullPointerException) {
-            // Currently an NPE is thrown when the Camera2API is used but not supported on the
-            // device this code runs.
-            ErrorDialog.newInstance(getString(com.example.videoapp.R.string.camera_error))
-                .show(childFragmentManager, FRAGMENT_DIALOG)
+            val map = characteristics?.get(
+                CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+            ) ?: continue
+            val largest = Collections.max(
+                map.getOutputSizes(ImageFormat.YUV_420_888).toList(),
+                CompareSizesByArea()
+            )
+            imageReader = ImageReader.newInstance(largest.width, largest.height, ImageFormat.YUV_420_888, 2).apply {
+                setOnImageAvailableListener(imageAvailableListener, backgroundHandler)
+            }
+            sensorOrientation = characteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION)
+            val displayRotation = requireActivity().windowManager.defaultDisplay.rotation
+            var swappedDimensions = false
+            when (displayRotation) {
+                ROTATION_0, ROTATION_180 -> if (sensorOrientation == 90 || sensorOrientation == 270) {
+                    swappedDimensions = true
+                }
+                ROTATION_90, ROTATION_270 -> if (sensorOrientation == 0 || sensorOrientation == 180) {
+                    swappedDimensions = true
+                }
+            }
+            val displaySize = Point()
+            requireActivity().windowManager.defaultDisplay.getSize(displaySize)
+            var rotatedPreviewWidth = width
+            var rotatedPreviewHeight = height
+            var maxPreviewWidth = displaySize.x
+            var maxPreviewHeight = displaySize.y
+
+            if (swappedDimensions) {
+                rotatedPreviewWidth = height
+                rotatedPreviewHeight = width
+                maxPreviewWidth = displaySize.y
+                maxPreviewHeight = displaySize.x
+            }
+
+            if (maxPreviewWidth > MAX_PREVIEW_WIDTH) {
+                maxPreviewWidth = MAX_PREVIEW_WIDTH
+            }
+
+            if (maxPreviewHeight > MAX_PREVIEW_HEIGHT) {
+                maxPreviewHeight = MAX_PREVIEW_HEIGHT
+            }
+            previewSize = chooseOptimalSize(
+                map.getOutputSizes(SurfaceTexture::class.java).toList(),
+                rotatedPreviewWidth,
+                rotatedPreviewHeight,
+                maxPreviewWidth,
+                maxPreviewHeight,
+                largest
+            )
+            deviceOrientation = resources.configuration.orientation
+            previewSize?.let {
+                if (deviceOrientation == Configuration.ORIENTATION_LANDSCAPE) {
+                    textureCamera.setAspectRatio(
+                        it.width, it.height
+                    )
+                } else {
+                    textureCamera.setAspectRatio(
+                        it.height, it.width
+                    )
+                }
+            }
+            this.cameraId = cameraId
+            return
         }
 
     }
@@ -317,9 +334,10 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
             val previewSurface = Surface(surfaceTexture)
             val imageSurface = imageReader?.surface
             captureRequestBuilder =
-                cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            captureRequestBuilder?.addTarget(previewSurface)
-            captureRequestBuilder?.addTarget(imageSurface)
+                cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)?.apply {
+                    addTarget(previewSurface)
+                    addTarget(imageSurface)
+                }
             cameraDevice?.createCaptureSession(
                 arrayListOf(previewSurface, imageSurface),
                 object : CameraCaptureSession.StateCallback() {
@@ -349,6 +367,47 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         }
     }
 
+    /**
+     * Retrieves the image orientation from the specified screen rotation.
+     * Used to calculate bitmap image rotation
+     */
+    private fun getImageOrientation(deviceRotation: Int, characteristics: CameraCharacteristics): Int {
+        if (deviceRotation == OrientationEventListener.ORIENTATION_UNKNOWN) {
+            return 0
+        }
+        val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+        // Sensor orientation is 90 for most devices, or 270 for some devices (eg. Nexus 5X)
+        // We have to take that into account and rotate JPEG properly.
+        // For devices with orientation of 90, we simply return our mapping from ORIENTATIONS.
+        // For devices with orientation of 270, we need to rotate the JPEG 180 degrees.
+        return (ORIENTATIONS.get(deviceRotation) + sensorOrientation + 270) % 360
+    }
+
+    private fun configureTransform(viewWidth: Int, viewHeight: Int) {
+        if (null == textureCamera || null == previewSize || null == activity) {
+            return
+        }
+        val rotation = requireActivity().windowManager.defaultDisplay.rotation
+        val matrix = Matrix()
+        val viewRect = RectF(0f, 0f, viewWidth.toFloat(), viewHeight.toFloat())
+        val bufferRect = RectF(0f, 0f, previewSize!!.height.toFloat(), previewSize!!.width.toFloat())
+        val centerX = viewRect.centerX()
+        val centerY = viewRect.centerY()
+        if (ROTATION_90 == rotation || ROTATION_270 == rotation) {
+            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY())
+            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL)
+            val scale = Math.max(
+                viewHeight.toFloat() / previewSize!!.height,
+                viewWidth.toFloat() / previewSize!!.width
+            )
+            matrix.postScale(scale, scale, centerX, centerY)
+            matrix.postRotate((90 * (rotation - 2)).toFloat(), centerX, centerY)
+        } else if (ROTATION_180 == rotation) {
+            matrix.postRotate(180F, centerX, centerY)
+        }
+        textureCamera.setTransform(matrix)
+    }
+
     private fun closeCamera() {
         cameraOpenCloseLock.acquire()
         cameraCaptureSession?.close()
@@ -368,8 +427,19 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         }
         handler?.let {
             handlerThread?.quitSafely()
+            handlerThread?.join()
+            FFmpegHandler.instance.close()
             handlerThread = null
             handler = null
         }
+    }
+
+    class CompareSizesByArea : Comparator<Size> {
+
+        override fun compare(lhs: Size, rhs: Size): Int {
+            // We cast here to ensure the multiplications won't overflow
+            return lhs.width * lhs.height - rhs.width * rhs.height
+        }
+
     }
 }
