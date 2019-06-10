@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
+import android.graphics.*
 import android.hardware.camera2.*
 import android.media.ImageReader
 import android.os.Bundle
@@ -24,10 +25,6 @@ import java.nio.ByteBuffer
 import java.util.*
 import java.util.concurrent.Semaphore
 import kotlin.collections.ArrayList
-import android.view.Surface.ROTATION_180
-import android.view.Surface.ROTATION_270
-import android.view.Surface.ROTATION_90
-import android.graphics.*
 
 
 class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
@@ -124,25 +121,28 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
         handler?.post {
             val image = reader?.acquireLatestImage()
             image?.let {
-                val planes = it.planes
                 FFmpegHandler.instance.encodeFrame(
                     0,
                     it.width,
                     it.height,
-                    planes[0].buffer,
-                    planes[0].pixelStride,
-                    planes[0].rowStride,
-                    planes[1].buffer,
-                    planes[1].pixelStride,
-                    planes[1].rowStride,
-                    planes[2].buffer,
-                    planes[2].pixelStride,
-                    planes[2].rowStride
+                    it.planes[0].buffer,
+                    it.planes[0].pixelStride,
+                    it.planes[0].rowStride,
+                    it.planes[1].buffer,
+                    it.planes[1].pixelStride,
+                    it.planes[1].rowStride,
+                    it.planes[2].buffer,
+                    it.planes[2].pixelStride,
+                    it.planes[2].rowStride
                 )
-                mySurfaceView.myBitmap?.let { bitmap ->
-                    val buffer = ByteBuffer.allocateDirect(bitmap.rowBytes * bitmap.height)
-                    bitmap.copyPixelsToBuffer(buffer)
-                    FFmpegHandler.instance.encodeARGBFrame(1, bitmap.width, bitmap.height, buffer)
+                if (drawChange != 0) {
+                    mySurfaceView.myBitmap?.let { bitmap ->
+                        val buffer = ByteBuffer.allocateDirect(bitmap.rowBytes * bitmap.height)
+                        bitmap.copyPixelsToBuffer(buffer)
+                        drawChange = FFmpegHandler.instance.encodeARGBFrame(1, bitmap.width, bitmap.height, buffer)
+                    }
+                } else {
+                    FFmpegHandler.instance.encodeARGBFrame(1, 0, 0, null)
                 }
                 it.close()
             }
@@ -161,6 +161,7 @@ class CameraFragment : Fragment(), EasyPermissions.PermissionCallbacks {
     private var sensorOrientation: Int? = null
     private var deviceOrientation: Int? = null
     private var characteristics: CameraCharacteristics? = null
+    private var drawChange: Int? = 1
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,

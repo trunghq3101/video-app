@@ -49,6 +49,8 @@ int count = 0;
 int width = 480;
 int height = 640;
 int fps = 30;
+AVFrame *pFrameARGB;
+int drawChange = 1;
 
 static int apply_filters(/*AVFormatContext *ifmt_ctx*/) {
     char args[512];
@@ -220,27 +222,6 @@ static int processFrame(int n, AVFrame *pOutFrame) {
     if (pFilteredFrame) {
         ret = convertFrame(pFilteredFrame, pOutFrame);
         if (ret < 0) goto END;
-
-        /*img_convert_ctx = sws_getContext(
-                picref->width,
-                picref->height,
-                (enum AVPixelFormat) picref->format,
-                pCodecCtx->width,
-                pCodecCtx->height,
-                OUTPUT_FMT,
-                SWS_BICUBIC, NULL, NULL, NULL);
-        sws_scale(
-                img_convert_ctx,
-                (const uint8_t *const *) picref->data,
-                picref->linesize,
-                0,
-                pCodecCtx->height,
-                pOutFrame->data,
-                pOutFrame->linesize);
-        sws_freeContext(img_convert_ctx);
-        pOutFrame->width = picref->width;
-        pOutFrame->height = picref->height;
-        pOutFrame->format = OUTPUT_FMT;*/
     }
     av_frame_free(&pFilteredFrame);
 
@@ -510,7 +491,6 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeFrame
     if (ret != 0) goto END;
 
     END:
-
     av_frame_free(&pFrameYUV);
     av_frame_free(&pOutFrame);
 
@@ -538,26 +518,7 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeARGBF
         jobject buffer
 ) {
     int ret = 0;
-
-    int picture_size = av_image_get_buffer_size(
-            AV_PIX_FMT_RGBA,
-            w,
-            h,
-            1);
-    uint8_t *buffers = (uint8_t *) av_malloc(picture_size);
-    AVFrame *pFrameARGB = av_frame_alloc();
     AVFrame *pOutFrame = av_frame_alloc();
-    av_image_fill_arrays(
-            pFrameARGB->data,
-            pFrameARGB->linesize,
-            buffers,
-            AV_PIX_FMT_RGBA,
-            w,
-            h,
-            1);
-    av_free(buffers);
-
-    uint8_t *in = (*jniEnv)->GetDirectBufferAddress(jniEnv, buffer);
 
     if (ofmt_ctx == NULL) {
         ret = -1;
@@ -569,22 +530,46 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeARGBF
         goto END;
     }
 
-    pFrameARGB->data[0] = in;
-    pFrameARGB->pts = count;
-    pFrameARGB->format = AV_PIX_FMT_RGBA;
-    pFrameARGB->width = w;
-    pFrameARGB->height = h;
-    pFrameARGB->linesize[0] = w * 4;
+    if (drawChange != 0 && pFrameARGB == NULL && buffer != NULL) {
+        pFrameARGB = av_frame_alloc();
+        int picture_size = av_image_get_buffer_size(
+                AV_PIX_FMT_RGBA,
+                w,
+                h,
+                1);
+        uint8_t *buffers = (uint8_t *) av_malloc(picture_size);
+        av_image_fill_arrays(
+                pFrameARGB->data,
+                pFrameARGB->linesize,
+                buffers,
+                AV_PIX_FMT_RGBA,
+                w,
+                h,
+                1);
+        av_free(buffers);
 
-    ret = convertFrame(pFrameARGB, pOutFrame);
-    if (ret < 0) goto END;
+        uint8_t *in = (*jniEnv)->GetDirectBufferAddress(jniEnv, buffer);
+        pFrameARGB->data[0] = in;
+        pFrameARGB->pts = count;
+        pFrameARGB->format = AV_PIX_FMT_RGBA;
+        pFrameARGB->width = w;
+        pFrameARGB->height = h;
+        pFrameARGB->linesize[0] = w * 4;
+    }
 
-    ret = processFrame(n, pOutFrame);
-    if (ret != 0) goto END;
+    if (pFrameARGB != NULL) {
+        ret = convertFrame(pFrameARGB, pOutFrame);
+        if (ret < 0) goto END;
+
+        ret = processFrame(n, pOutFrame);
+        if (ret != 0) goto END;
+
+        drawChange = 0;
+    }
 
     END:
 
-    av_frame_free(&pFrameARGB);
+    //av_frame_free(&pFrameARGB);
     av_frame_free(&pOutFrame);
 
     return ret;
@@ -592,6 +577,11 @@ JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_encodeARGBF
 
 JNIEXPORT jint JNICALL Java_com_example_videoapp_utils_FFmpegHandler_close
         (JNIEnv *jniEnv, jobject instance) {
+
+    if (pFrameARGB != NULL) {
+        av_frame_free(&pFrameARGB);
+    }
+
     if (pCodecCtx != NULL) {
         avcodec_close(pCodecCtx);
         pCodecCtx = NULL;
